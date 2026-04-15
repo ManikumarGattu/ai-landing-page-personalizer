@@ -25,7 +25,7 @@ app.add_middleware(
 )
 
 client = genai.Client(api_key=os.getenv("GEMINI_API_KEY", ""))
-MODEL_ID = "gemini-flash-latest"
+MODEL_ID = "gemini-1.5-flash"
 
 
 # ==============================
@@ -154,20 +154,21 @@ Return:
  "reason": ""
 }}
 """
-
+    print("PROMPT:", prompt[:500])
     try:
-        ai_res = client.models.generate_content(
+        response = client.models.generate_content(
             model=MODEL_ID,
-            contents=prompt,
-            config={
-                "temperature": 0.3,
-                "top_p": 0.8,
-                "top_k": 20
-            }
-        )
+            contents=prompt
+    )
 
-        ai_text = ai_res.text or ""
-        print("AI RAW:", ai_text)
+        ai_output = response.text
+
+    except Exception as e:
+        print("AI ERROR:", str(e))
+        return {
+            "success": False,
+            "error": "AI processing failed"
+        }
 
         match = re.search(r"\{.*\}", ai_text, re.DOTALL)
 
