@@ -23,7 +23,7 @@ function App() {
     formData.append("ad_link", ad);
 
     try {
-      const res = await fetch("http://localhost:8000/api/personalize", {
+      const res = await fetch("https://ai-landing-page-personalizer-v9l2.onrender.com/api/personalize", {
         method: "POST",
         body: formData,
       });
