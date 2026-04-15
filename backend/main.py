@@ -156,28 +156,24 @@ Return:
 }}
 """
     print("PROMPT:", prompt[:500])
+
     try:
         response = client.models.generate_content(
             model=MODEL_ID,
             contents=prompt
-    )
+        )
 
-        ai_output = response.text
+        ai_output = response.text or ""
 
-    except Exception as e:
-        print("AI ERROR:", str(e))
-        return {
-            "success": False,
-            "error": "AI processing failed"
-        }
+        print("AI RAW:", ai_output[:500])
 
-        match = re.search(r"\{.*\}", ai_text, re.DOTALL)
+        match = re.search(r"\{.*\}", ai_output, re.DOTALL)
 
         if match:
             parsed = json.loads(match.group(0))
         else:
             parsed = {
-                "analysis": {"mismatches": ["AI invalid output"]},
+                "analysis": {"mismatches": ["AI returned invalid JSON"]},
                 "replacements": [],
                 "cta": "Explore Now",
                 "paragraph": "Discover more.",
@@ -185,10 +181,10 @@ Return:
             }
 
     except Exception as e:
-        print("AI ERROR:", e)
+        print("AI ERROR FULL:", str(e))
         return {
             "success": False,
-            "error": "AI processing failed"
+            "error": str(e)
         }
 
     # ==============================
