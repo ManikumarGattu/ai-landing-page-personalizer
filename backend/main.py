@@ -60,10 +60,11 @@ async def personalize_page(
         )
         response.raise_for_status()
         soup = BeautifulSoup(response.content, "html.parser")
-    except Exception:
+    except Exception as e:
+        print("AI ERROR FULL:", str(e))   
         return {
             "success": False,
-            "error": "Unable to fetch page (site may block scraping)"
+            "error": str(e) 
         }
 
     headings = []
