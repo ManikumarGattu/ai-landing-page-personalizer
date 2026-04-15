@@ -7,41 +7,39 @@ function App() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
 
+  // ✅ YOUR LIVE BACKEND URL
+  const API_URL = "https://ai-landing-page-personalizer-v9l2.onrender.com/api/personalize";
+
   const handleSubmit = async () => {
-    // ✅ Validation
-    if (!ad || !url) {
+    if (!ad.trim() || !url.trim()) {
       setError("Please enter both Ad Content and URL");
       return;
     }
 
     setLoading(true);
-    setData(null);
     setError("");
+    setData(null);
 
     const formData = new FormData();
     formData.append("target_url", url);
     formData.append("ad_link", ad);
 
     try {
-      const res = await fetch("https://ai-landing-page-personalizer-v9l2.onrender.com/api/personalize", {
+      const res = await fetch(API_URL, {
         method: "POST",
         body: formData,
       });
 
-      if (!res.ok) {
-        throw new Error("Backend error");
-      }
-
       const result = await res.json();
 
-      if (!result.success) {
-        throw new Error("Processing failed");
+      if (!res.ok || !result.success) {
+        throw new Error(result.error || "Backend processing failed");
       }
 
       setData(result.data);
-
     } catch (err) {
-      setError("Failed to process request. Check backend.");
+      console.error("FRONTEND ERROR:", err);
+      setError(err.message || "Something went wrong. Check backend.");
     }
 
     setLoading(false);
@@ -49,9 +47,9 @@ function App() {
 
   return (
     <div className="container">
-      <h1>AI Landing Page Personalizer</h1>
+      <h1>🚀 AI Landing Page Personalizer</h1>
 
-      {/* INPUT */}
+      {/* ================= INPUT ================= */}
       <div className="card">
         <h2>Input</h2>
 
@@ -59,7 +57,7 @@ function App() {
         <textarea
           value={ad}
           onChange={(e) => setAd(e.target.value)}
-          placeholder="e.g. 50% OFF for students - limited time"
+          placeholder="e.g. Get 50% OFF for students – limited time"
         />
 
         <label>Landing Page URL</label>
@@ -73,27 +71,26 @@ function App() {
           {loading ? "Processing..." : "Generate"}
         </button>
 
-        {/* ERROR */}
         {error && (
           <p style={{ color: "red", marginTop: "10px" }}>{error}</p>
         )}
       </div>
 
-      {/* EMPTY STATE */}
+      {/* ================= EMPTY ================= */}
       {!data && !loading && (
         <div className="card">
-          <p>Enter details and click Generate to see results.</p>
+          <p>Enter Ad + URL and click Generate to see AI results.</p>
         </div>
       )}
 
-      {/* LOADING */}
+      {/* ================= LOADING ================= */}
       {loading && (
         <div className="card">
-          <p>⏳ AI is analyzing and optimizing the page...</p>
+          <p>⏳ AI is analyzing ad and optimizing landing page...</p>
         </div>
       )}
 
-      {/* OUTPUT */}
+      {/* ================= OUTPUT ================= */}
       {data && (
         <>
           {/* HOW IT WORKS */}
@@ -111,12 +108,21 @@ function App() {
           {/* AD ANALYSIS */}
           <div className="card">
             <h2>Ad Analysis</h2>
-            <p><b>Offer:</b> <span style={{color:"#22c55e"}}>{data.ad_analysis?.offer}</span></p>
-            <p><b>Audience:</b> {data.ad_analysis?.audience}</p>
-            <p><b>Tone:</b> {data.ad_analysis?.tone}</p>
+            <p>
+              <b>Offer:</b>{" "}
+              <span style={{ color: "#22c55e" }}>
+                {data.ad_analysis?.offer || "N/A"}
+              </span>
+            </p>
+            <p>
+              <b>Audience:</b> {data.ad_analysis?.audience || "N/A"}
+            </p>
+            <p>
+              <b>Tone:</b> {data.ad_analysis?.tone || "N/A"}
+            </p>
           </div>
 
-          {/* MISMATCH */}
+          {/* MISMATCHES */}
           <div className="card">
             <h2>Mismatches</h2>
             <ul>
@@ -131,11 +137,15 @@ function App() {
           {/* IMPROVEMENTS */}
           <div className="card">
             <h2>Improvements</h2>
-            <h2 style={{color:"#22c55e"}}>{data.cta}</h2>
-            <p><b>Paragraph:</b> {data.paragraph}</p>
+            <h3 style={{ color: "#22c55e" }}>
+              {data.cta || "Explore Now"}
+            </h3>
+            <p>
+              <b>Paragraph:</b> {data.paragraph || "N/A"}
+            </p>
           </div>
 
-          {/* BEFORE AFTER */}
+          {/* BEFORE VS AFTER */}
           <div className="card">
             <h2>Before vs After</h2>
             {data.replacements?.length > 0 ? (
@@ -147,31 +157,35 @@ function App() {
                 </div>
               ))
             ) : (
-              <p>No changes required</p>
+              <p>No changes applied</p>
             )}
           </div>
 
           {/* REASON */}
           <div className="card">
             <h2>Why Changes?</h2>
-            <p>{data.reason}</p>
+            <p>{data.reason || "N/A"}</p>
           </div>
 
           {/* PREVIEW */}
           <div className="card">
             <h2 style={{ color: "#22c55e" }}>
-              🚀 Enhanced Landing Page (CRO Optimized)
+              🚀 Enhanced Landing Page
             </h2>
 
             <p style={{ fontSize: "14px", color: "#94a3b8" }}>
-              This is the original page enhanced based on ad intent using AI-driven CRO principles.
+              This is the original page enhanced using AI-driven CRO optimization.
             </p>
 
             <iframe
               srcDoc={data.html}
               width="100%"
               height="500"
-              style={{ border: "none", background: "white" }}
+              style={{
+                border: "none",
+                background: "white",
+                borderRadius: "8px",
+              }}
             />
           </div>
         </>

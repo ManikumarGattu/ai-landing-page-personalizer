@@ -24,8 +24,25 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+# Gemini Client
 client = genai.Client(api_key=os.getenv("GEMINI_API_KEY", ""))
-MODEL_ID = "gemini-1.5-flash"
+
+# ✅ Stable model
+MODEL_ID = "gemini-2.0-flash"
+
+
+# ==============================
+# HELPER FUNCTION
+# ==============================
+def extract_json(text: str):
+    """Safely extract JSON from AI response"""
+    try:
+        match = re.search(r"\{.*?\}", text, re.DOTALL)
+        if match:
+            return json.loads(match.group(0))
+    except Exception as e:
+        print("JSON PARSE ERROR:", e)
+    return None
 
 
 # ==============================
@@ -37,6 +54,7 @@ async def personalize_page(
     ad_image: UploadFile = File(None),
     ad_link: str = Form(None)
 ):
+
     # ==============================
     # VALIDATION
     # ==============================
@@ -50,7 +68,7 @@ async def personalize_page(
     # STEP 1: FETCH PAGE
     # ==============================
     try:
-        response = requests.get(
+        res = requests.get(
             target_url,
             timeout=10,
             headers={
@@ -58,13 +76,13 @@ async def personalize_page(
                 "Accept-Language": "en-US,en;q=0.9"
             }
         )
-        response.raise_for_status()
-        soup = BeautifulSoup(response.content, "html.parser")
+        res.raise_for_status()
+        soup = BeautifulSoup(res.content, "html.parser")
     except Exception as e:
-        print("AI ERROR FULL:", str(e))   
+        print("SCRAPE ERROR:", str(e))
         return {
             "success": False,
-            "error": str(e) 
+            "error": "Failed to fetch page"
         }
 
     headings = []
@@ -88,7 +106,7 @@ async def personalize_page(
     ad_prompt = """
 Extract structured info from this ad.
 
-Return JSON:
+Return ONLY JSON:
 {
   "offer": "",
   "audience": "",
@@ -112,18 +130,20 @@ Return JSON:
     try:
         ad_res = client.models.generate_content(
             model=MODEL_ID,
-            contents=contents,
-            config={"temperature": 0.3}
+            contents=contents
         )
 
         ad_text = ad_res.text or ""
-        match = re.search(r"\{.*\}", ad_text, re.DOTALL)
+        print("AD AI RAW:", ad_text[:300])
 
-        ad_data = json.loads(match.group(0)) if match else {
-            "offer": "", "audience": "", "tone": ""
+        ad_data = extract_json(ad_text) or {
+            "offer": "",
+            "audience": "",
+            "tone": ""
         }
 
-    except Exception:
+    except Exception as e:
+        print("AD AI ERROR:", str(e))
         ad_data = {"offer": "", "audience": "", "tone": ""}
 
     # ==============================
@@ -134,11 +154,9 @@ You are a CRO expert.
 
 STRICT RULES:
 - No hallucination
-- No fake claims
-- Use only given content
-- CTA must be action-driven (use words like "Start", "Get", "Claim", "Explore Now")
-CTA must include urgency if offer exists (e.g., "Limited Time", "Today", "Now")
-- Return valid JSON only
+- Use only given data
+- CTA must be action-oriented (Get, Claim, Start, Explore Now)
+- Add urgency if offer exists
 
 Ad:
 {json.dumps(ad_data)}
@@ -146,7 +164,7 @@ Ad:
 Page:
 {json.dumps(headings)}
 
-Return:
+Return ONLY JSON:
 {{
  "analysis": {{"mismatches": []}},
  "replacements": [],
@@ -155,7 +173,8 @@ Return:
  "reason": ""
 }}
 """
-    print("PROMPT:", prompt[:500])
+
+    print("PROMPT:", prompt[:400])
 
     try:
         response = client.models.generate_content(
@@ -164,24 +183,18 @@ Return:
         )
 
         ai_output = response.text or ""
+        print("AI RAW:", ai_output[:400])
 
-        print("AI RAW:", ai_output[:500])
-
-        match = re.search(r"\{.*\}", ai_output, re.DOTALL)
-
-        if match:
-            parsed = json.loads(match.group(0))
-        else:
-            parsed = {
-                "analysis": {"mismatches": ["AI returned invalid JSON"]},
-                "replacements": [],
-                "cta": "Explore Now",
-                "paragraph": "Discover more.",
-                "reason": "Fallback used"
-            }
+        parsed = extract_json(ai_output) or {
+            "analysis": {"mismatches": ["AI returned invalid JSON"]},
+            "replacements": [],
+            "cta": "Explore Now",
+            "paragraph": "Discover more.",
+            "reason": "Fallback used"
+        }
 
     except Exception as e:
-        print("AI ERROR FULL:", str(e))
+        print("AI ERROR:", str(e))
         return {
             "success": False,
             "error": str(e)
@@ -193,7 +206,6 @@ Return:
     safe_replacements = []
 
     for item in parsed.get("replacements", []):
-
         original = (
             item.get("original") or
             item.get("old") or
@@ -209,11 +221,10 @@ Return:
 
         if original and new:
             safe_replacements.append({
-                "original": original,
-                "new": new
+                "original": original.strip(),
+                "new": new.strip()
             })
 
-    # Ensure at least one replacement
     if not safe_replacements:
         safe_replacements = [
             {
@@ -225,23 +236,22 @@ Return:
     parsed["replacements"] = safe_replacements
 
     # ==============================
-    # STEP 5: DEFAULTS + NORMALIZATION
+    # STEP 5: NORMALIZATION
     # ==============================
     parsed.setdefault("analysis", {"mismatches": []})
-    parsed.setdefault("cta", headings[0]["text"] if headings else "Explore Now")
+    parsed.setdefault("cta", headings[0]["text"])
     parsed.setdefault("paragraph", "Learn more about this offering.")
     parsed.setdefault("reason", "Improved alignment with ad intent.")
 
     parsed["cta"] = parsed["cta"].strip()
-
     parsed["paragraph"] = parsed["paragraph"].strip()
 
-    if len(parsed["paragraph"]) > 160:
-        words = parsed["paragraph"].split()
-        parsed["paragraph"] = " ".join(words[:30]) + "..."
+    # Limit paragraph length
+    if len(parsed["paragraph"]) > 180:
+        parsed["paragraph"] = " ".join(parsed["paragraph"].split()[:30]) + "..."
 
-    if not parsed["paragraph"].strip():
-        parsed["paragraph"] = "Explore this offering and discover more value."
+    if not parsed["paragraph"]:
+        parsed["paragraph"] = "Explore more and discover value."
 
     # ==============================
     # STEP 6: APPLY CRO CHANGES
@@ -249,26 +259,22 @@ Return:
     original_html = str(soup)
 
     try:
-        replacements = {}
-
-        for item in parsed.get("replacements", []):
-            original = item.get("original", "").strip()
-            new = item.get("new", "")
-
-            if original and new:
-                replacements[original] = new
+        replacements_map = {
+            r["original"]: r["new"]
+            for r in parsed["replacements"]
+        }
 
         for tag in tags:
             txt = tag.get_text(strip=True)
-            if txt in replacements:
-                tag.string = replacements[txt]
+            if txt in replacements_map:
+                tag.string = replacements_map[txt]
 
-        # Replace main heading (h1 or h2)
+        # Replace main heading
         main_heading = soup.find(["h1", "h2"])
         if main_heading:
             main_heading.string = parsed["cta"]
 
-        # Replace first paragraph
+        # Replace paragraph
         p = soup.find("p")
         if p:
             p.string = parsed["paragraph"]
@@ -281,7 +287,7 @@ Return:
         final_html = str(soup)
 
     except Exception as e:
-        print("UI ERROR:", e)
+        print("HTML ERROR:", str(e))
         final_html = original_html
 
     # ==============================
@@ -291,7 +297,7 @@ Return:
         "success": True,
         "data": {
             "ad_analysis": ad_data,
-            "mismatches": parsed.get("analysis", {}).get("mismatches", []),
+            "mismatches": parsed["analysis"]["mismatches"],
             "replacements": parsed["replacements"],
             "cta": parsed["cta"],
             "paragraph": parsed["paragraph"],
