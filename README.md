@@ -25,9 +25,8 @@
 
 ## 📸 Project Interface
 
-![Project Screenshot](./screenshot.png)
-
-> 📌 Replace `screenshot.png` with your actual project screenshot
+![Project Screenshot](./screenshot1.png)
+(./screenshot2.png)
 
 ---
 
