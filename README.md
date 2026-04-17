@@ -25,8 +25,7 @@
 
 ## 📸 Project Interface
 
-![Project Screenshot](./screenshot1.png)
-(./screenshot2.png)
+![Project Screenshot](Screenshots/screenshot1.png)(Screenshots/screenshot2.png)
 
 ---
 
