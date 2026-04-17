@@ -139,51 +139,58 @@ troopod-ai/
 ```bash
 git clone https://github.com/your-username/ai-landing-page-personalizer.git
 cd ai-landing-page-personalizer
+```
+### 2. Setup Backend
 ```bash
-2. Setup Backend
 cd backend
 python -m venv venv
 venv\Scripts\activate   # Windows
 pip install -r requirements.txt
 uvicorn main:app --reload
-3. Setup Frontend
+```
+### 3. Setup Frontend
+```bash
 cd frontend
 npm install
 npm run dev
-🔑 Environment Variables
+```
+### 🔑 Environment Variables
 
-Create .env in backend:
-
+#### Create .env in backend:
+```bash
 GEMINI_API_KEY=your_api_key_here
-☁️ Deployment
+```
+### ☁️ Deployment
+```bash
 Service	Platform
 Frontend	Vercel
 Backend	Render
-⚠️ Challenges
+```
+### ⚠️ Challenges
 ❌ Website scraping blocked (403 errors)
 ❌ Gemini API quota issues (429 errors)
 ❌ Model compatibility issues (404 errors)
-⚠️ Limitations
+
+### ⚠️ Limitations
 Cannot scrape protected websites (Amazon, Udemy)
 Depends on AI API quota
 Static scraping only (no JS rendering)
-🚀 Future Enhancements
+
+### 🚀 Future Enhancements
 Selenium-based dynamic scraping
 Multi-language support
 A/B testing engine
 AI scoring system
-🧠 Key Learnings
+
+### 🧠 Key Learnings
 Difference between code issues vs infrastructure issues
 Handling API rate limits and quotas
 Real-world constraints in scraping
 Building end-to-end AI systems
-👨‍💻 Author
+
+### 👨‍💻 Author
 <div align="center">
-
-Your Name
-
-
-
+GATTU MANI KUMAR
 
 </div>
 <div align="center">
