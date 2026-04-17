@@ -168,37 +168,28 @@ Service	Platform
 Frontend	Vercel
 Backend	Render
 ```
----
 
 ### ⚠️ Challenges
-❌ Website scraping blocked (403 errors)
-❌ Gemini API quota issues (429 errors)
-❌ Model compatibility issues (404 errors)
-
----
+- ❌ Website scraping blocked (403 errors)
+- ❌ Gemini API quota issues (429 errors)
+- ❌ Model compatibility issues (404 errors)
 
 ### ⚠️ Limitations
-Cannot scrape protected websites (Amazon, Udemy)
-Depends on AI API quota
-Static scraping only (no JS rendering)
-
----
+- Cannot scrape protected websites (Amazon, Udemy)
+- Depends on AI API quota
+- Static scraping only (no JS rendering)
 
 ### 🚀 Future Enhancements
-Selenium-based dynamic scraping
-Multi-language support
-A/B testing engine
-AI scoring system
-
----
+- Selenium-based dynamic scraping
+- Multi-language support
+- A/B testing engine
+- AI scoring system
 
 ### 🧠 Key Learnings
-Difference between code issues vs infrastructure issues
-Handling API rate limits and quotas
-Real-world constraints in scraping
-Building end-to-end AI systems
-
----
+- Difference between code issues vs infrastructure issues
+- Handling API rate limits and quotas
+- Real-world constraints in scraping
+- Building end-to-end AI systems
 
 ### 👨‍💻 Author
 <div align="center">
