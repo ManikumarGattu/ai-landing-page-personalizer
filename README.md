@@ -25,7 +25,8 @@
 
 ## 📸 Project Interface
 
-![Project Screenshot](Screenshots/screenshot1.png)(Screenshots/screenshot2.png)
+![Project Screenshot](Screenshots/screenshot1.png)
+![Project Screenshot](Screenshots/screenshot2.png)
 
 ---
 
@@ -163,8 +164,8 @@ GEMINI_API_KEY=your_api_key_here
 ### ☁️ Deployment
 ```bash
 Service	Platform
-Frontend	Vercel
-Backend	Render
+Frontend-Vercel : https://ai-landing-page-personalizer-pearl.vercel.app/
+Backend-Render : https://ai-landing-page-personalizer-v9l2.onrender.com
 ```
 
 ### ⚠️ Challenges
