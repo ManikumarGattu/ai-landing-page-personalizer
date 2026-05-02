@@ -2,8 +2,7 @@ from fastapi import FastAPI, UploadFile, File, Form, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 import requests
 from bs4 import BeautifulSoup
-from google import genai
-from google.genai import types
+from groq import Groq
 import os
 import json
 import re
@@ -24,25 +23,21 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Gemini Client
-client = genai.Client(api_key=os.getenv("GEMINI_API_KEY", ""))
+client = Groq(api_key=os.getenv("GROQ_API_KEY"))
 
-# ✅ Stable model
-MODEL_ID = "gemini-2.0-flash"
-print("USING MODEL:", MODEL_ID)
+MODEL_ID = "llama3-70b-8192"
 
 
 # ==============================
 # HELPER FUNCTION
 # ==============================
 def extract_json(text: str):
-    """Safely extract JSON from AI response"""
     try:
         match = re.search(r"\{.*?\}", text, re.DOTALL)
         if match:
             return json.loads(match.group(0))
     except Exception as e:
-        print("JSON PARSE ERROR:", e)
+        print("JSON ERROR:", e)
     return None
 
 
@@ -52,99 +47,73 @@ def extract_json(text: str):
 @app.post("/api/personalize")
 async def personalize_page(
     target_url: str = Form(...),
-    ad_image: UploadFile = File(None),
+    ad_image: UploadFile = File(None),  # Ignored (not supported in Groq)
     ad_link: str = Form(None)
 ):
 
-    # ==============================
-    # VALIDATION
-    # ==============================
-    if not (ad_image or (ad_link and ad_link.strip())):
-        raise HTTPException(status_code=400, detail="Provide valid ad input")
+    if not (ad_link and ad_link.strip()):
+        raise HTTPException(status_code=400, detail="Provide ad text")
 
     print("URL:", target_url)
     print("AD:", ad_link)
 
     # ==============================
-    # STEP 1: FETCH PAGE
+    # STEP 1: SCRAPE PAGE
     # ==============================
     try:
         res = requests.get(
             target_url,
             timeout=10,
-            headers={
-                "User-Agent": "Mozilla/5.0",
-                "Accept-Language": "en-US,en;q=0.9"
-            }
+            headers={"User-Agent": "Mozilla/5.0"}
         )
         res.raise_for_status()
         soup = BeautifulSoup(res.content, "html.parser")
     except Exception as e:
-        print("SCRAPE ERROR:", str(e))
-        return {
-            "success": False,
-            "error": "Failed to fetch page"
-        }
+        return {"success": False, "error": "Failed to fetch page"}
 
     headings = []
     tags = []
 
     for tag in soup.find_all(["h1", "h2", "h3"]):
-        text = tag.get_text(strip=True)
-        if text:
-            headings.append({"type": tag.name, "text": text})
+        txt = tag.get_text(strip=True)
+        if txt:
+            headings.append({"type": tag.name, "text": txt})
             tags.append(tag)
 
     if not headings:
-        return {
-            "success": False,
-            "error": "No headings found on page"
-        }
+        return {"success": False, "error": "No headings found"}
 
     # ==============================
-    # STEP 2: AD ANALYSIS
+    # STEP 2: AD ANALYSIS (GROQ)
     # ==============================
-    ad_prompt = """
-Extract structured info from this ad.
+    ad_prompt = f"""
+Extract structured JSON from this ad:
 
-Return ONLY JSON:
-{
-  "offer": "",
-  "audience": "",
-  "tone": ""
-}
+Ad: {ad_link}
+
+Return ONLY:
+{{
+ "offer": "",
+ "audience": "",
+ "tone": ""
+}}
 """
 
-    contents = [ad_prompt]
-
-    if ad_image:
-        image_bytes = await ad_image.read()
-        contents.append(
-            types.Part.from_bytes(
-                data=image_bytes,
-                mime_type=ad_image.content_type or "image/png"
-            )
-        )
-    else:
-        contents.append(f"Ad Content: {ad_link}")
-
     try:
-        ad_res = client.models.generate_content(
+        ad_response = client.chat.completions.create(
             model=MODEL_ID,
-            contents=contents
+            messages=[{"role": "user", "content": ad_prompt}]
         )
 
-        ad_text = ad_res.text or ""
-        print("AD AI RAW:", ad_text[:300])
+        ad_text = ad_response.choices[0].message.content
+        print("AD RAW:", ad_text[:200])
 
         ad_data = extract_json(ad_text) or {
-            "offer": "",
-            "audience": "",
-            "tone": ""
+            "offer": "", "audience": "", "tone": ""
         }
 
     except Exception as e:
-        print("AD AI ERROR:", str(e))
+        print("AD ERROR:", e)
         ad_data = {"offer": "", "audience": "", "tone": ""}
 
     # ==============================
@@ -152,12 +121,6 @@ Return ONLY JSON:
     # ==============================
     prompt = f"""
 You are a CRO expert.
-
-STRICT RULES:
-- No hallucination
-- Use only given data
-- CTA must be action-oriented (Get, Claim, Start, Explore Now)
-- Add urgency if offer exists
 
 Ad:
 {json.dumps(ad_data)}
@@ -175,121 +138,69 @@ Return ONLY JSON:
 }}
 """
 
-    print("PROMPT:", prompt[:400])
-
     try:
-        response = client.models.generate_content(
+        response = client.chat.completions.create(
             model=MODEL_ID,
-            contents=prompt
+            messages=[{"role": "user", "content": prompt}]
         )
 
-        ai_output = response.text or ""
-        print("AI RAW:", ai_output[:400])
+        ai_output = response.choices[0].message.content
+        print("AI RAW:", ai_output[:300])
 
         parsed = extract_json(ai_output) or {
-            "analysis": {"mismatches": ["AI returned invalid JSON"]},
+            "analysis": {"mismatches": []},
             "replacements": [],
             "cta": "Explore Now",
-            "paragraph": "Discover more.",
-            "reason": "Fallback used"
+            "paragraph": "Discover more",
+            "reason": "Fallback"
         }
 
     except Exception as e:
-        print("AI ERROR:", str(e))
-        return {
-            "success": False,
-            "error": str(e)
-        }
+        return {"success": False, "error": str(e)}
 
     # ==============================
     # STEP 4: SAFE REPLACEMENTS
     # ==============================
-    safe_replacements = []
+    safe = []
 
     for item in parsed.get("replacements", []):
-        original = (
-            item.get("original") or
-            item.get("old") or
-            item.get("old_text") or
-            ""
-        )
+        old = item.get("original") or item.get("old") or ""
+        new = item.get("new") or ""
 
-        new = (
-            item.get("new") or
-            item.get("new_text") or
-            ""
-        )
+        if old and new:
+            safe.append({"original": old, "new": new})
 
-        if original and new:
-            safe_replacements.append({
-                "original": original.strip(),
-                "new": new.strip()
-            })
+    if not safe:
+        safe = [{
+            "original": headings[0]["text"],
+            "new": parsed.get("cta", headings[0]["text"])
+        }]
 
-    if not safe_replacements:
-        safe_replacements = [
-            {
-                "original": headings[0]["text"],
-                "new": parsed.get("cta", headings[0]["text"])
-            }
-        ]
-
-    parsed["replacements"] = safe_replacements
+    parsed["replacements"] = safe
 
     # ==============================
-    # STEP 5: NORMALIZATION
+    # STEP 5: APPLY CHANGES
     # ==============================
-    parsed.setdefault("analysis", {"mismatches": []})
-    parsed.setdefault("cta", headings[0]["text"])
-    parsed.setdefault("paragraph", "Learn more about this offering.")
-    parsed.setdefault("reason", "Improved alignment with ad intent.")
-
-    parsed["cta"] = parsed["cta"].strip()
-    parsed["paragraph"] = parsed["paragraph"].strip()
-
-    # Limit paragraph length
-    if len(parsed["paragraph"]) > 180:
-        parsed["paragraph"] = " ".join(parsed["paragraph"].split()[:30]) + "..."
-
-    if not parsed["paragraph"]:
-        parsed["paragraph"] = "Explore more and discover value."
-
-    # ==============================
-    # STEP 6: APPLY CRO CHANGES
-    # ==============================
-    original_html = str(soup)
-
     try:
-        replacements_map = {
-            r["original"]: r["new"]
-            for r in parsed["replacements"]
-        }
+        mapping = {i["original"]: i["new"] for i in safe}
 
         for tag in tags:
             txt = tag.get_text(strip=True)
-            if txt in replacements_map:
-                tag.string = replacements_map[txt]
+            if txt in mapping:
+                tag.string = mapping[txt]
 
-        # Replace main heading
-        main_heading = soup.find(["h1", "h2"])
-        if main_heading:
-            main_heading.string = parsed["cta"]
+        h1 = soup.find(["h1", "h2"])
+        if h1:
+            h1.string = parsed["cta"]
 
-        # Replace paragraph
         p = soup.find("p")
         if p:
             p.string = parsed["paragraph"]
 
-        # Fix relative links
-        if soup.head:
-            base = soup.new_tag("base", href=target_url)
-            soup.head.insert(0, base)
-
         final_html = str(soup)
 
-    except Exception as e:
-        print("HTML ERROR:", str(e))
-        final_html = original_html
+    except Exception:
+        final_html = str(soup)
 
     # ==============================
     # FINAL RESPONSE
@@ -298,17 +209,16 @@ Return ONLY JSON:
         "success": True,
         "data": {
             "ad_analysis": ad_data,
-            "mismatches": parsed["analysis"]["mismatches"],
+            "mismatches": parsed.get("analysis", {}).get("mismatches", []),
             "replacements": parsed["replacements"],
             "cta": parsed["cta"],
             "paragraph": parsed["paragraph"],
             "reason": parsed["reason"],
-            "html": final_html,
-            "confidence": "High"
+            "html": final_html
         }
     }
 
 
 @app.get("/")
 def root():
-    return {"message": "AI Personalization API Running"}
+    return {"message": "Groq AI Backend Running"}
