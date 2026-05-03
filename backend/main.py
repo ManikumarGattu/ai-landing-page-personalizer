@@ -37,7 +37,7 @@ else:
     print("✅ GROQ API KEY LOADED")
     client = Groq(api_key=API_KEY)
 
-MODEL_ID = "llama3-8b-8192"
+MODEL_ID = "llama3-8b-8192-preview"
 
 # ==============================
 # HELPER FUNCTION
