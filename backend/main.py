@@ -23,7 +23,12 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-client = Groq(api_key=os.getenv("GROQ_API_KEY"))
+API_KEY = os.getenv("GROQ_API_KEY")
+
+if not API_KEY:
+    raise Exception("GROQ_API_KEY is missing!")
+
+client = Groq(api_key=API_KEY)
 
 MODEL_ID = "llama3-70b-8192"
 
