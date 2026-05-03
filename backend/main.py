@@ -11,6 +11,8 @@ from dotenv import load_dotenv
 # ==============================
 # INIT
 # ==============================
+print("🚀 STARTING FASTAPI APP...")
+
 load_dotenv()
 
 app = FastAPI()
@@ -23,15 +25,19 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+# ==============================
+# GROQ SETUP (SAFE)
+# ==============================
 API_KEY = os.getenv("GROQ_API_KEY")
 
 if not API_KEY:
-    raise Exception("GROQ_API_KEY is missing!")
-
-client = Groq(api_key=API_KEY)
+    print("❌ WARNING: GROQ_API_KEY is missing")
+    client = None
+else:
+    print("✅ GROQ API KEY LOADED")
+    client = Groq(api_key=API_KEY)
 
 MODEL_ID = "llama3-70b-8192"
-
 
 # ==============================
 # HELPER FUNCTION
@@ -52,9 +58,16 @@ def extract_json(text: str):
 @app.post("/api/personalize")
 async def personalize_page(
     target_url: str = Form(...),
-    ad_image: UploadFile = File(None),  # Ignored (not supported in Groq)
+    ad_image: UploadFile = File(None),  # ignored
     ad_link: str = Form(None)
 ):
+
+    # 🔒 Safety check
+    if not client:
+        return {
+            "success": False,
+            "error": "GROQ_API_KEY not configured in backend"
+        }
 
     if not (ad_link and ad_link.strip()):
         raise HTTPException(status_code=400, detail="Provide ad text")
@@ -74,6 +87,7 @@ async def personalize_page(
         res.raise_for_status()
         soup = BeautifulSoup(res.content, "html.parser")
     except Exception as e:
+        print("SCRAPE ERROR:", e)
         return {"success": False, "error": "Failed to fetch page"}
 
     headings = []
@@ -89,7 +103,7 @@ async def personalize_page(
         return {"success": False, "error": "No headings found"}
 
     # ==============================
-    # STEP 2: AD ANALYSIS (GROQ)
+    # STEP 2: AD ANALYSIS
     # ==============================
     ad_prompt = f"""
 Extract structured JSON from this ad:
@@ -161,6 +175,7 @@ Return ONLY JSON:
         }
 
     except Exception as e:
+        print("AI ERROR:", e)
         return {"success": False, "error": str(e)}
 
     # ==============================
@@ -204,7 +219,8 @@ Return ONLY JSON:
 
         final_html = str(soup)
 
-    except Exception:
+    except Exception as e:
+        print("HTML MODIFY ERROR:", e)
         final_html = str(soup)
 
     # ==============================
@@ -224,6 +240,9 @@ Return ONLY JSON:
     }
 
 
+# ==============================
+# ROOT
+# ==============================
 @app.get("/")
 def root():
     return {"message": "Groq AI Backend Running"}
